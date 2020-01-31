@@ -9,16 +9,20 @@
 ****************************************************/
 
 #include <stdio.h>
+#include <math.h>
 #include <curses.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/timeb.h>
 #include "pacman.h"
-
+#include "agent.h"
+#include <time.h>
+#include <unistd.h>
 #define EXIT_MSG "Good bye!"
 #define END_MSG "Game Over"
 #define QUIT_MSG "Bye"
 #define LEVEL_ERR "Cannot find level file: "
+#define _BSD_SOURCE
 
 void IntroScreen();                                 //Show introduction screen and menu
 void CheckCollision();                              //See if Pacman and Ghosts collided
@@ -34,7 +38,16 @@ void MainLoop();                                    //Main program function
 void MoveGhosts();                                  //Update Ghosts' location
 void MovePacman();                                  //Update Pacman's location
 void PauseGame();                                   //Pause
-
+void GetState();										//Ermittlung des States für Agent
+void save_to_file();								//Speichern in .Dat File von auswertungsrelevanten Informationen
+void get_Reward();									//aktuellen Reward ausrechnen
+void get_session_count();							//Session Count einlesen
+void write_session_count();							//Session count inkrementieren und speichern
+//extern void getAction(int *action, int *Invincible, int *Lives, int *Points, int *LevelNumber, int *Loc, int *Level);
+//extern void getAction(int *action,int Invincible, int Lives, int Points, int LevelNumber, int Loc[][2], int Level[][28]);
+extern void getAction(int *action,int State); //wird nicht genutzt! Falls in Cuda gecodet werden soll ist das in dieser Umgebung so möglich
+void get_Action ();
+int get_argmax();
 //For ncurses
 WINDOW * win;
 WINDOW * status;
@@ -52,6 +65,13 @@ int Level[29][28] = { 0 };				//Main level array
 int LevelNumber = 0;					//What level number are we on?
 int GhostsInARow = 0;					//Keep track of how many points to give for eating ghosts
 int tleft = 0;						//How long left for invincibility
+int State = 0;
+int action;
+int nr_o_actions=0;
+int Reward;
+int Session;
+int sleep_time=10000;
+int action;
 
 int main(int argc, char *argv[]) {
 
@@ -61,7 +81,8 @@ int main(int argc, char *argv[]) {
 	InitCurses();
 	CheckScreenSize();
 	CreateWindows(29, 28, 1, 1);
-
+	get_session_count();
+	write_session_count();
 	//If they specified a level to load
 	if((argc > 1) && (strlen(argv[1]) > 1)) {
 		LoadLevel(argv[1]);
@@ -71,7 +92,7 @@ int main(int argc, char *argv[]) {
 	//If not, display intro screen then use default levels
 	else {
 		//Show intro "movie"
-		IntroScreen();
+		//IntroScreen();
 
 		j = 1;
 		//They want to start at a level 1-9
@@ -89,7 +110,6 @@ int main(int argc, char *argv[]) {
 		}
 
 	}
-
 	ExitProgram(EXIT_MSG);
 }
 
@@ -106,7 +126,7 @@ void CheckCollision() {
 				GhostsInARow *= 2;
 				wrefresh(win);
 
-				usleep(1000000);
+				usleep(sleep_time);
 
 				Loc[a][0] = StartingPoints[a][0]; Loc[a][1] = StartingPoints[a][1];
 			}
@@ -119,7 +139,7 @@ void CheckCollision() {
 				wrefresh(win);
 
 				Lives--;
-				usleep(1000000);
+				usleep(sleep_time);
 
 				if(Lives == -1) ExitProgram(END_MSG);
 
@@ -136,7 +156,7 @@ void CheckCollision() {
 
 				DrawWindow();
 
-				usleep(1000000);
+				usleep(sleep_time);
 			}
 		}
 	}
@@ -167,6 +187,7 @@ void Delay() {
 	//Slow down the game a little bit
 	do {
 		GetInput();
+		
 		ftime(&t_current);
 	} while (abs(t_start.millitm - t_current.millitm) < SpeedOfGame);
 }
@@ -196,7 +217,7 @@ void DrawWindow() {
 		wprintw(status, "C ");
 	wprintw(status, "  ");
 	wattron(status, COLOR_PAIR(Normal));
-	mvwprintw(status, 2, 2, "Level: %d     Score: %d ", LevelNumber, Points);
+	mvwprintw(status, 2, 2, "Lvl: %d Scr: %d", LevelNumber, Points);
 	wrefresh(status);
 
 	//Display ghosts
@@ -231,12 +252,24 @@ void ExitProgram(const char *message) {
 void GetInput() {
 	int ch;
 	static int chtmp;
-
-	ch = getch();
-
+	GetState();
+	get_Action();
+	//case 1,2,3,4 ToDo
+	switch(action){
+		case 0: ch=KEY_UP; break;
+		case 1: ch=KEY_RIGHT; break;
+		case 2: ch=KEY_DOWN; break;
+		case 3: ch=KEY_LEFT; break;
+		}
+		
+		
+		
+		
+		
+	
 	//Buffer input
-	if(ch == ERR) ch = chtmp;
-	chtmp = ch;
+	//if(ch == ERR) ch = chtmp;
+	
 
 	switch (ch) {
 		case KEY_UP:    case 'w': case 'W':
@@ -263,16 +296,9 @@ void GetInput() {
 				{ Dir[4][0] =  0; Dir[4][1] =  1; }
 			break;
 
-		case 'p': case 'P':
-			PauseGame();
-			chtmp = getch();
-			break;
-
-		case 'q': case 'Q':
-			ExitProgram(QUIT_MSG);
-			break;
 
 	}
+	
 }
 
 void InitCurses() {
@@ -314,14 +340,14 @@ void IntroScreen() {
 		wattron(win, COLOR_PAIR(Pacman));
 		mvwprintw(win, 8, a, " C");
 		wrefresh(win);
-		usleep(100000);
+		usleep(sleep_time);
 	}
 
 	//Show "Pacman"
 	wattron(win, COLOR_PAIR(Pacman));
 	mvwprintw(win, 8, 12, "PACMAN");
 	wrefresh(win);
-	usleep(1000000);
+	usleep(sleep_time);
 
 	//Ghosts Chase Pacman
 	for(a = 0; a < 23; a++) {
@@ -333,10 +359,10 @@ void IntroScreen() {
 		wattron(win, COLOR_PAIR(Ghost2)); mvwprintw(win, 13, a-7, " &");
 		wattron(win, COLOR_PAIR(Ghost4)); mvwprintw(win, 13, a-9, " &");
 		wrefresh(win);
-		usleep(100000);
+		usleep(sleep_time);
 	}
 
-	usleep(150000);
+	usleep(sleep_time);
 
 	//Pacman Chases Ghosts
 	for(a = 25; a > 2; a--) {
@@ -355,7 +381,7 @@ void IntroScreen() {
 
 		wattron(win, COLOR_PAIR(Pellet)); mvwprintw(win, 13, 23, " ");
 		wrefresh(win);
-		usleep(100000);
+		usleep(sleep_time);
 	}
 
 }
@@ -414,18 +440,23 @@ void MainLoop() {
 	DrawWindow();
 	wrefresh(win);
 	wrefresh(status);
-	usleep(1000000);
+	usleep(sleep_time);
 
 	do {
+		Delay();
 		MovePacman();	DrawWindow();	CheckCollision();
 		MoveGhosts();	DrawWindow();	CheckCollision();
+		nr_o_actions++;
 		if(Points > FreeLife) { Lives++; FreeLife *= 2;}
-		Delay();
-
+		get_Reward();
+		save_to_file();
+		//score berechnen
+		//Speichern
+		
 	} while (Food > 0);
 
 	DrawWindow();
-	usleep(1000000);
+	usleep(sleep_time);
 
 }
 
@@ -509,6 +540,7 @@ void MoveGhosts() {
 	}
 }
 
+
 void MovePacman() {
 
 	static int itime = 0;
@@ -569,4 +601,173 @@ void PauseGame() {
 		chtmp = getch();
 	} while (chtmp == ERR);
 
+}
+
+void GetState(){
+	
+	int pacman_row = Loc[4][0];
+	int pacman_col = Loc[4][1];
+	int row_max = 28;
+	int col_max = 27;
+	int min = 0;
+	
+	State = Invincible;
+	
+	for (int i = 0; i < 12 ; i++){
+		
+		int row_add = 0;
+		int col_add = 0;
+		
+		switch (i){
+			case 0: 
+			row_add = -2;
+			break;
+			
+			case 1:	
+			row_add = -1;
+			col_add = -1;
+			break;
+			
+			case 2:	
+			row_add = -1;
+			break;		
+			
+			case 3:	
+			row_add = -1;
+			col_add = +1;
+			break;
+
+			case 4:	
+			col_add = -2;
+			break;
+			
+			case 5:	
+			col_add = -1;
+			break;
+			
+			case 6:	
+			col_add = +1;
+			break;
+			
+			case 7:	
+			col_add = +2;
+			break;
+			
+			case 8:	
+			row_add = +1;
+			col_add = -1;
+			break;
+			
+			case 9:	
+			row_add = +1;
+			break;
+			
+			case 10:	
+			row_add = +1;
+			col_add = +1;
+			break;
+			
+			case 11:	
+			row_add = +2;
+			break;
+		}
+	int row_temp = pacman_row + row_add;
+	int col_temp = pacman_col + col_add;
+	
+	
+	row_temp = row_temp > row_max ? row_temp -29 : row_temp;
+	row_temp = row_temp < min ? row_temp +29 : row_temp;
+	col_temp = col_temp > col_max ? col_temp -28 : col_temp;
+	col_temp = col_temp < min ? col_temp +28 : col_temp;
+	
+	int i_temp = Level[row_temp][col_temp];
+	 
+	if (i_temp == 4) i_temp = 0;
+	if (i_temp == 3) i_temp = 2;
+	
+	for(int j = 0; j < 4; j++){
+		if ((Loc[j][0] == row_temp) && (Loc[j][1] == col_temp)){
+			i_temp = 3;
+			break;
+			}
+		}
+	State = State + i_temp * pow(2, (2*i + 1));
+	 	 
+	} 
+	
+	
+}
+void get_session_count() {
+		FILE *dat =fopen("session_count.dat", "r");
+		fscanf(dat, "%d", &Session );
+		fclose(dat);
+}
+
+void write_session_count() {
+	Session++;
+	FILE *dat =fopen("session_count.dat", "w");
+	fprintf(dat, "%d", Session);
+	fclose(dat);
+}
+
+
+void save_to_file () {
+	//ToDo: Filenamen vorher definieren, in Abhängigkeit von Session
+	FILE *dat = fopen("training.dat", "a");
+	fprintf(dat, "%d ", State);
+	fprintf(dat, "%d ", action);
+	fprintf(dat, "%d ", Reward);
+	fprintf(dat, "%d", Session);
+	fprintf(dat, "\n");
+	fclose(dat);
+}
+
+void get_Reward() {
+	int x=10;
+	int y=50;
+	int z=100;
+	Reward=x*(2*Points-nr_o_actions)+y*(Lives-4)+z*LevelNumber;
+}
+void get_Action() {
+	//*action= rand()%4;
+	//exploration rate (in %) festlegen
+	int explore_rate=30;
+	srand(time(NULL));
+	//0-100  Als Random Zahl generieren
+	int temp_random=rand()%101;
+	//explore
+	if (temp_random<explore_rate){
+		action = rand()%4;	
+	}
+	else {
+		char filename[100];
+		snprintf(filename, sizeof(filename),"./Q/%d.dat",State);
+		FILE *dat=fopen(filename, "r");
+		int Q[4];
+		if ( dat!=NULL)
+		{
+			fscanf(dat, "%d %d %d %d", &Q[0],&Q[1],&Q[2],&Q[3]);
+			fclose(dat);
+			action = get_argmax(Q,4);
+			
+		}
+		else
+		{
+			//Explore if Agent doesnt know State
+			action = rand()%4;	
+		}						
+			
+	}
+
+}
+
+int get_argmax (int arr[], int n){
+	int i;
+	int arg_max=0;
+	for(i=1; i<n;i++){
+		if(arr[i]>arr[arg_max]){
+			arg_max=i;
+		}
+	}
+	return arg_max;
 }

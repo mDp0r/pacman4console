@@ -1,0 +1,17 @@
+#!/bin/bash
+#@echo off
+#loopcount=5
+#:loop
+
+# ./prog
+#if %loopcount%==0 goto exitloop
+#goto loop
+#:exitloop
+#pause
+resize -s 50 100
+
+for i in {1..50}
+do
+    ./prog
+done
+

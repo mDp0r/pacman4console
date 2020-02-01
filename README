@@ -1,3 +1,31 @@
+
+
+Adaption for Reinforcement Learning
+=================
+In my masters class "GPU-Programming" we used this console pacman to implement a Q-learning algorithm for reinforcement learning. We had alot of fun doing everything but GPU programming in fact. Anyway, we modified the Makefile to make it possible to call Cuda-C functions from the Original C-File. You can find an excample how to do that with the function "getAction()" called in pacman.c, defined in agent.cu and linked via agent.h. We also reduced the delays, sped the game up and removed the starting animation for a faster learning process. Can be reverted though, just look at the forked original.
+
+So, Reinforcement Learning Pacman?
+=================
+Basically what we did is quantizising the states Pacman can be in. Since there is actually alot, we reduced the possible States to the 2 - Neighbourhood. 
+
+![See picture] 2er_Nachbarschaft.png "Neighbourhood")
+Also we have just 4 different possibilities per field: Nothing,wall, item, ghost. Also we use the information if Pacman is invinvible at the moment. Sessions are recorded in a .dat File (training.dat). We recorded several Sessions already (Sessions_1-5.dat). We actually wanted to do the evaluation in Cuda C, but since we did not have enough time, we quickly did it in Python. Script is Model_Evaluation.py. This Script creates a matrix with the Reward for every seen state and conducted action. This are saved in .dat Files with the quantized States as Filename. So for every seen state we have a .dat file. Also we wrote a bash script, to start pacman several times. Filename is train. 
+
+How to get started
+=================
+1) Install ncurses
+2) Make install
+3) Make
+4) Use ./prog for letting pacman play once and ./train for letting pacman play x (50 at the moment) times
+5) Watch pacman and have fun!
+
+Future Notes
+============
+Pacman is still pretty bad at the moment. Some students in the future might continue this project. There are still alot of optimization possibilities. One might be to include the Python script in the bash file to do evaluation every time after pacman has played. Might also implement a neural network or do some parallelisation on the Window Drawing or the training.
+
+Original Part of Readme
+=================
+
 Pacman For Console
 ==================
 Okay, so basically, I got tired of enabling flash on my browser so that I could

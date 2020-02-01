@@ -8,7 +8,7 @@ So, Reinforcement Learning Pacman?
 =================
 Basically what we did is quantizising the states Pacman can be in. Since there is actually alot, we reduced the possible States to the 2 - Neighbourhood. 
 
-![See picture] 2er_Nachbarschaft.png "Neighbourhood")
+![See the screenshot.](2er_Nachbarschaft.png "State_Quantization")
 Also we have just 4 different possibilities per field: Nothing,wall, item, ghost. Also we use the information if Pacman is invinvible at the moment. Sessions are recorded in a .dat File (training.dat). We recorded several Sessions already (Sessions_1-5.dat). We actually wanted to do the evaluation in Cuda C, but since we did not have enough time, we quickly did it in Python. Script is Model_Evaluation.py. This Script creates a matrix with the Reward for every seen state and conducted action. This are saved in .dat Files with the quantized States as Filename. So for every seen state we have a .dat file. Also we wrote a bash script, to start pacman several times. Filename is train. 
 
 How to get started
